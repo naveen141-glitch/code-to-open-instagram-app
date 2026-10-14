@@ -1,0 +1,88 @@
+package com.example.voiceinsta
+
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.os.Bundle
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
+
+class MainActivity : AppCompatActivity() {
+
+    private lateinit var etCommand: EditText
+    private lateinit var tvStatus: TextView
+    private var recognizer: SpeechRecognizer? = null
+
+    private val micPermission =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            if (granted) startListening() else tvStatus.text = "Microphone permission needed"
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        etCommand = findViewById(R.id.etCommand)
+        tvStatus = findViewById(R.id.tvStatus)
+
+        findViewById<Button>(R.id.btnSend).setOnClickListener {
+            handleCommand(etCommand.text.toString())
+        }
+
+        findViewById<Button>(R.id.btnMic).setOnClickListener {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                == PackageManager.PERMISSION_GRANTED
+            ) startListening()
+            else micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
+    private fun startListening() {
+        recognizer?.destroy()
+        recognizer = SpeechRecognizer.createSpeechRecognizer(this).apply {
+            setRecognitionListener(object : RecognitionListener {
+                override fun onResults(results: Bundle?) {
+                    val text = results
+                        ?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        ?.firstOrNull().orEmpty()
+                    etCommand.setText(text)
+                    handleCommand(text)
+                }
+                override fun onError(error: Int) { tvStatus.text = "Try again" }
+                override fun onReadyForSpeech(params: Bundle?) { tvStatus.text = "Listening..." }
+                override fun onBeginningOfSpeech() {}
+                override fun onRmsChanged(rmsdB: Float) {}
+                override fun onBufferReceived(buffer: ByteArray?) {}
+                override fun onEndOfSpeech() {}
+                override fun onPartialResults(partialResults: Bundle?) {}
+                override fun onEvent(eventType: Int, params: Bundle?) {}
+            })
+        }
+        val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+            putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        }
+        recognizer?.startListening(intent)
+    }
+
+    private fun handleCommand(raw: String) {
+        val command = raw.lowercase().trim()
+        if ("instagram" in command && ("open" in command || "start" in command || "launch" in command)) {
+            val launch = packageManager.getLaunchIntentForPackage("com.instagram.android")
+            if (launch != null) startActivity(launch) else tvStatus.text = "Instagram not installed"
+        } else {
+            tvStatus.text = "Say or type: open Instagram"
+        }
+    }
+
+    override fun onDestroy() {
+        recognizer?.destroy()
+        super.onDestroy()
+    }
+}
